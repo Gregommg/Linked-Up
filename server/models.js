@@ -4,8 +4,11 @@ const { Schema } = mongoose;
 const User = mongoose.model('User', new Schema({
   username: { type: String, unique: true, required: true, lowercase: true, trim: true },
   email: { type: String, unique: true, required: true, lowercase: true, trim: true },
-  passHash: { type: String, required: true }
+  passHash: { type: String, required: true },
+  clashHighScore: { type: Number, default: 0, min: 0 },
+  highScoreVisibility: { type: String, enum: ['public', 'private', 'hidden'], default: 'private' }
 }, { timestamps: true }));
+User.schema.index({ highScoreVisibility: 1, clashHighScore: -1 });
 
 const fs = new Schema({
   requester: { type: Schema.Types.ObjectId, ref: 'User', required: true },

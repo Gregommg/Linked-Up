@@ -1,7 +1,9 @@
 node_modules/
 .env
+.env.example
+.env.example*
+README.md
 .env.*
-!.env.example
 npm-debug.log*
 *.log
 coverage/

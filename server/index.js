@@ -4,7 +4,7 @@ const express = require('express'), cors = require('cors'), mongoose = require('
 const bcrypt = require('bcryptjs'), jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { User, Friendship } = require('./models');
-const { Room } = require('./game');
+const { Room, ClashArena, MAX_PLAYERS, MAX_TEAMS } = require('./game');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -52,6 +52,32 @@ app.post('/api/login', wrap(async (req, res) => {
 }));
 
 app.get('/api/me', auth, (req, res) => res.json({ id: req.user.id, username: req.user.username }));
+
+app.get('/api/highscores', auth, wrap(async (req, res) => {
+  const user = await User.findById(req.user.id).select('clashHighScore highScoreVisibility');
+  if (!user) throw fail(404, 'Player not found.');
+  const leaders = await User.find({ highScoreVisibility: 'public', clashHighScore: { $gt: 0 } })
+    .sort({ clashHighScore: -1, username: 1 })
+    .limit(10)
+    .select('username clashHighScore')
+    .lean();
+  res.json({
+    visibility: user.highScoreVisibility || 'private',
+    personalBest: user.highScoreVisibility === 'hidden' ? null : user.clashHighScore || 0,
+    leaders: leaders.map((player, index) => ({
+      rank: index + 1, username: player.username, score: player.clashHighScore
+    }))
+  });
+}));
+
+app.patch('/api/me/high-score-visibility', auth, wrap(async (req, res) => {
+  const { visibility } = req.body || {};
+  if (!['public', 'private', 'hidden'].includes(visibility)) {
+    throw fail(400, 'Choose public, private, or hidden visibility.');
+  }
+  await User.updateOne({ _id: req.user.id }, { $set: { highScoreVisibility: visibility } });
+  res.json({ visibility });
+}));
 
 app.delete('/api/me', auth, wrap(async (req, res) => {
   const id = req.user.id;
@@ -155,6 +181,69 @@ function createRoom(me) {
   joinRoom(me, code);
   return code;
 }
+function teamRoomFor(uid) {
+  const room = rooms.get(userRoom.get(uid));
+  if (!(room instanceof Room) || room.mode !== 'coop') return { error: 'Create or join a team room first.' };
+  if (room.host !== uid) return { error: 'Only your team-room host can create or join a clash.' };
+  if (room.phase !== 'lobby') return { error: 'Your team must be in its lobby to enter a clash.' };
+  return { room };
+}
+function transferTeamToArena(source, arena) {
+  const members = source.players.map(p => ({ id: p.id, username: p.username, dirs: [] }));
+  const error = arena.addTeam(members, source.host);
+  if (error) return error;
+
+  source.stop();
+  rooms.delete(source.code);
+  io.to(source.channel).emit('room', null);
+  for (const player of members) {
+    userRoom.set(player.id, arena.code);
+    io.in('u:' + player.id).socketsLeave(source.channel);
+    io.in('u:' + player.id).socketsJoin(arena.channel);
+    announce(player.id);
+  }
+  arena.push();
+  return null;
+}
+function createClashArena(uid, options = {}) {
+  const { room: source, error } = teamRoomFor(uid);
+  if (error) return error;
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return 'Choose valid clash settings.';
+  const durationMs = options.duration === 'none' ? null : Number(options.duration);
+  if (durationMs !== null && ![120000, 180000, 300000].includes(durationMs)) return 'Choose a supported clash duration.';
+  if (!['respawn', 'eliminate', 'end-match'].includes(options.crashRule)) return 'Choose a valid crash rule.';
+  if (source.players.length > MAX_PLAYERS) return 'A team can have at most 4 players.';
+
+  const code = genCode();
+  const arena = new ClashArena(code, io, uid, {
+    durationMs, crashRule: options.crashRule,
+    onEnd: results => saveClashHighScores(results).catch(error => {
+      console.error('Could not save clash high scores:', error.message);
+    })
+  });
+  rooms.set(code, arena);
+  const transferError = transferTeamToArena(source, arena);
+  if (transferError) rooms.delete(code);
+  return transferError;
+}
+function joinClashArena(uid, code) {
+  const { room: source, error } = teamRoomFor(uid);
+  if (error) return error;
+  const arena = rooms.get(code);
+  if (!(arena instanceof ClashArena)) return 'Clash arena not found. Check the code.';
+  if (arena.teams.length >= MAX_TEAMS) return 'This clash already has 4 teams.';
+  if (source.players.length > MAX_PLAYERS) return 'A team can have at most 4 players.';
+  return transferTeamToArena(source, arena);
+}
+async function saveClashHighScores(results) {
+  for (const team of results) {
+    if (!team.participantIds.length) continue;
+    await User.updateMany(
+      { _id: { $in: team.participantIds } },
+      { $max: { clashHighScore: team.score } }
+    );
+  }
+}
 
 io.use(async (socket, next) => {
   try {
@@ -181,8 +270,27 @@ io.on('connection', socket => {
   socket.on('room:leave', () => leaveRoom(me.id));
   socket.on('room:start', () => { const r = rooms.get(userRoom.get(me.id)); const e = r && r.start(me.id); if (e) err(e); });
   socket.on('input', ({ dir } = {}) => { const r = rooms.get(userRoom.get(me.id)); if (r) r.input(me.id, dir); });
+  socket.on('arena:create', (options = {}) => {
+    const e = createClashArena(me.id, options);
+    if (e) err(e);
+  });
+  socket.on('arena:join', ({ code } = {}) => {
+    const e = joinClashArena(me.id, String(code || '').trim().toUpperCase());
+    if (e) err(e);
+  });
+  socket.on('arena:teamJoin', ({ code, teamId } = {}) => {
+    const arena = rooms.get(String(code || '').trim().toUpperCase());
+    if (!(arena instanceof ClashArena)) return err('Clash arena not found. Check the code.');
+    if (userRoom.has(me.id)) return err('Leave your current room before joining a team.');
+    const e = arena.addPlayerToTeam(me.id, me.username, String(teamId || ''));
+    if (e) return err(e);
+    userRoom.set(me.id, arena.code);
+    io.in('u:' + me.id).socketsJoin(arena.channel);
+    arena.push();
+    announce(me.id);
+  });
 
-  // Invite a friend: only friends who are currently ONLINE (not offline, not already in a game).
+  // Invite a friend: to a regular room or to the inviter's team in a clash lobby.
   socket.on('invite:send', async ({ friendId } = {}) => {
     try {
       if (!(await friendIds(me.id)).includes(String(friendId))) return err('You can only invite friends.');
@@ -192,8 +300,14 @@ io.on('connection', socket => {
       let c = userRoom.get(me.id) || createRoom(me);
       const room = rooms.get(c);
       if (room.phase !== 'lobby') return err("You can't invite during a game.");
-      if (room.players.length >= 4) return err('Your room is full (4 players).');
-      io.to('u:' + friendId).emit('invite', { from: me.username, code: c });
+      let invite = { from: me.username, code: c };
+      if (room instanceof ClashArena) {
+        const team = room.teams.find(t => t.playerIds.includes(me.id));
+        if (!team) return err('Your team was not found in this clash.');
+        if (team.playerIds.length >= MAX_PLAYERS) return err('Your team is full (4 players).');
+        invite = { ...invite, teamId: team.id };
+      } else if (room.players.length >= MAX_PLAYERS) return err('Your room is full (4 players).');
+      io.to('u:' + friendId).emit('invite', invite);
       socket.emit('toast', 'Invite sent!');
     } catch { err('Could not send invite.'); }
   });
