@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Linked Up (Coil-ition)</title>
+<style>
+:root{--bg:#10151c;--card:#1a222d;--line:#2a3544;--tx:#e8eef6;--mut:#8b9bb0;--acc:#5be37d;--warn:#ffb454;--bad:#ff6b6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+h1,h2,h3{margin:0 0 10px}h1{font-size:22px}h2{font-size:17px}h3{font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.hidden{display:none!important}
+.wrap{max-width:980px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+input{width:100%;padding:10px;margin:0 0 8px;border-radius:8px;border:1px solid var(--line);background:#0d1219;color:var(--tx);font-size:15px}
+button{padding:9px 14px;border:0;border-radius:8px;background:var(--acc);color:#07210f;font-weight:600;font-size:14px;cursor:pointer}
+button.sec{background:#2a3544;color:var(--tx)}button.bad{background:var(--bad);color:#2b0a0a}button:disabled{opacity:.35;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center}.row>input{margin:0}
+.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1}.tabs .on{background:var(--acc);color:#07210f}.tabs :not(.on){background:#2a3544;color:var(--tx)}
+.err{color:var(--bad);min-height:20px;font-size:13px}
+.layout{display:grid;grid-template-columns:1fr 290px;gap:12px}
+@media(max-width:760px){.layout{grid-template-columns:1fr}}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.friend{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line)}
+.friend:last-child{border:0}.friend .n{flex:1}
+.dot{width:10px;height:10px;border-radius:50%;background:#4b5565}.dot.online{background:var(--acc)}.dot.in_game{background:var(--warn)}
+.lbl{font-size:12px;color:var(--mut)}
+.friend button{padding:5px 10px;font-size:12px}
+canvas{width:100%;max-width:600px;background:#0d1219;border:2px solid var(--line);border-radius:10px;display:block;margin:0 auto}
+.players{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
+.pl{background:#0d1219;border:1px solid var(--line);border-radius:8px;padding:8px;text-align:center}.pl.me{border-color:var(--acc)}
+.keys{font-size:22px;letter-spacing:4px;min-height:30px}
+.code{font-size:30px;letter-spacing:6px;font-weight:700;color:var(--acc)}
+.pad{display:grid;grid-template-columns:repeat(3,70px);grid-template-rows:repeat(3,60px);gap:8px;justify-content:center;margin-top:12px;touch-action:none}
+.pad button{font-size:24px;background:#2a3544;color:var(--tx)}.pad button.mine{background:var(--acc);color:#07210f}.pad button:disabled{opacity:.25}
+.banner{position:fixed;left:10px;right:10px;top:calc(10px + env(safe-area-inset-top));z-index:9;display:grid;gap:8px;max-width:520px;margin:auto}
+.toast{background:var(--card);border:1px solid var(--acc);border-radius:10px;padding:10px 12px;display:flex;gap:8px;align-items:center}.toast span{flex:1}
+.center{text-align:center}.small{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="banner" id="banner"></div>
+
+<!-- Sign in / register -->
+<div class="wrap" id="authView" style="max-width:420px;margin-top:40px">
+  <h1 class="center">🐍 Linked Up</h1>
+  <p class="center small">Everyone controls one direction of the same snake. Talk to each other!</p>
+  <div class="card">
+    <div class="tabs"><button id="tabLogin" class="on">Sign in</button><button id="tabReg">Create account</button></div>
+    <form id="loginForm">
+      <input id="lIdent" placeholder="Username or email" autocomplete="username" autocapitalize="none" required>
+      <input id="lPass" type="password" placeholder="Password" autocomplete="current-password" required>
+      <button style="width:100%">Sign in</button>
+    </form>
+    <form id="regForm" class="hidden">
+      <input id="rUser" placeholder="Username (3-20 letters/numbers/_)" autocapitalize="none" required>
+      <input id="rEmail" type="email" placeholder="Email" autocapitalize="none" required>
+      <input id="rPass" type="password" placeholder="Password (min 6 characters)" autocomplete="new-password" required>
+      <button style="width:100%">Create account</button>
+    </form>
+    <div class="err" id="authErr"></div>
+  </div>
+  <p class="center small"><a href="downloads/linked-up.apk" style="color:var(--acc)">Download the Android app (.apk)</a></p>
+</div>
+
+<!-- Main app -->
+<div class="wrap hidden" id="appView">
+  <div class="top">
+    <h1>🐍 Linked Up</h1>
+    <div class="row"><span id="meName" class="lbl"></span><button class="sec" id="logoutBtn">Log out</button></div>
+  </div>
+  <div class="layout">
+    <div>
+      <!-- Home -->
+      <div id="homeView">
+        <div class="card">
+          <h2>Play together</h2>
+          <button id="createBtn" style="width:100%;margin-bottom:10px">Create a game room</button>
+          <div class="row"><input id="joinCode" placeholder="Room code" maxlength="4" style="text-transform:uppercase"><button id="joinBtn" class="sec">Join</button></div>
+          <div class="err" id="homeErr"></div>
+        </div>
+        <div class="card small">Up to 4 players per room. Each player controls different directions, so you have to call out your turns. Use the arrow keys / WASD, or the on-screen buttons on a phone.</div>
+        <div class="card"><button class="bad" id="deleteBtn" style="padding:6px 10px;font-size:12px">Delete my account</button></div>
+      </div>
+      <!-- Room -->
+      <div id="roomView" class="hidden">
+        <div class="card center">
+          <div class="small">Room code (share it, or invite friends)</div>
+          <div class="code" id="roomCode">----</div>
+          <div class="players" id="players"></div>
+          <div class="row" style="justify-content:center">
+            <button id="startBtn">Start game</button><button id="leaveBtn" class="sec">Leave room</button>
+          </div>
+          <div class="err" id="roomErr"></div>
+        </div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:8px"><b id="scoreTxt">Score: 0</b><span class="lbl" id="bestTxt"></span></div>
+          <canvas id="board" width="600" height="400"></canvas>
+          <div class="pad" id="pad">
+            <span></span><button data-d="up">▲</button><span></span>
+            <button data-d="left">◄</button><span></span><button data-d="right">►</button>
+            <span></span><button data-d="down">▼</button><span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friends -->
+    <div>
+      <div class="card">
+        <h3>Add a friend</h3>
+        <div class="row"><input id="friendName" placeholder="Their username"><button id="addBtn">Add</button></div>
+        <div class="err" id="friendErr"></div>
+      </div>
+      <div class="card hidden" id="reqCard"><h3>Friend requests</h3><div id="reqList"></div></div>
+      <div class="card"><h3>Friends</h3><div id="friendList"><span class="small">No friends yet.</span></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

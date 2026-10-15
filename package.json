@@ -1,0 +1,32 @@
+{
+  "name": "linked-up-coilition",
+  "version": "1.0.0",
+  "description": "Cooperative multiplayer snake: every player controls one direction of a shared snake.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "cap:sync": "npx cap sync",
+    "cap:android": "npx cap open android",
+    "cap:ios": "npx cap open ios"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.7.0",
+    "mongoose": "^8.5.0",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/cli": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0"
+  },
+  "overrides": {
+    "tar": "^7.5.21"
+  }
+}
