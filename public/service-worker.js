@@ -1,4 +1,4 @@
-const CACHE_NAME = 'linked-up-shell-v5';
+const CACHE_NAME = 'linked-up-shell-v6';
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -9,7 +9,7 @@ const APP_SHELL = [
   '/favicon.png',
   '/manifest.webmanifest',
   '/icons/linked-up.svg',
-  '/icons/snake-reference.jpeg',
+  '/icons/snake-reference.png',
   '/icons/apple-touch-icon.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
