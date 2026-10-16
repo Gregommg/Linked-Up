@@ -23,17 +23,43 @@ Cooperative multiplayer snake. Up to 4 players share ONE snake and each controls
 5. The team with the highest score when the match ends wins. A tie is shared.
 
 ## Run locally
-1. Install Node 18+ and MongoDB (or use a free MongoDB Atlas URI)
-2. `cp .env.example .env` and edit `MONGODB_URI` and `JWT_SECRET`
+1. Install Node.js 24.20.0 (also specified in `.node-version`) and create a Neon PostgreSQL project.
+2. Copy `.env.example` to `.env`; set `DATABASE_URL` to Neon's connection string and set `JWT_SECRET` to a long random secret.
 3. `npm install && npm start`
 4. Open http://localhost:3000 in several browser tabs/accounts
 5. Run `npm test` to execute the game logic tests
 
-## Deploy (web) on Render
-Push to GitHub, create a Render Web Service (`render.yaml` is included), set `MONGODB_URI` (MongoDB Atlas). Players then open your Render URL.
+The PostgreSQL tables are created automatically when the server starts. This migration starts with an empty Neon database; existing MongoDB accounts and friendships are not copied.
+
+## Deploy the multiplayer backend to Railway with Neon
+1. Push the project to GitHub.
+2. Create a Neon project and copy its PostgreSQL connection string from the **Connect** dialog. Use Neon's pooled connection string for the app service.
+3. In Railway, create a project from the GitHub repository and deploy the Node.js service. Railway uses the included `railway.json` to start the backend.
+4. In the Railway service's **Variables** settings, set `DATABASE_URL` to the Neon connection string and set `JWT_SECRET` to a long, random secret.
+5. Deploy, then generate a public domain in Railway's **Settings → Networking** and copy its HTTPS URL.
+
+The backend must remain on an always-on Node host: it uses Express, Neon PostgreSQL, and persistent Socket.IO connections for live multiplayer. Netlify hosts the frontend, not this Socket.IO server.
+
+If your previous MongoDB connection string or password was shared or committed, rotate that database password in Atlas. This app no longer reads `MONGODB_URI`.
+
+## Deploy the frontend to Netlify
+1. In Netlify, choose **Add new site → Import an existing project** and connect the same GitHub repository.
+2. Netlify reads `netlify.toml` for its build command and `dist` publish directory.
+3. In the Netlify site's environment variables, set `BACKEND_URL` to the Railway HTTPS origin (for example `https://linked-up-production.up.railway.app`; no path or trailing API route).
+4. Trigger a deploy. The build copies `public/` to `dist/` and writes the backend URL into the generated `config.js`.
+5. Open the Netlify site URL, register an account, and test sign-in and multiplayer. Keep `BACKEND_URL` configured for every deploy context you use.
+
+To test the Netlify build locally in PowerShell:
+
+```powershell
+$env:BACKEND_URL = "https://linked-up-production.up.railway.app"
+npm run build:netlify
+```
+
+Do not use `npm start` as Netlify's build command; Netlify serves the generated static frontend, while Railway runs the multiplayer backend.
 
 ## Android and iOS (Capacitor wraps the same web app)
-1. Deploy the server first, then set `window.API_BASE` in `public/config.js` to your server URL (e.g. `https://linked-up.onrender.com`)
+1. Deploy the server first, then set `window.API_BASE` in `public/config.js` to your server URL (e.g. `https://linked-up-production.up.railway.app`)
 2. `npm install`
 3. `npx cap add android` and/or `npx cap add ios`
 4. `npx cap sync`

@@ -1,14 +1,14 @@
 require('dotenv').config();
 const path = require('path'), http = require('http');
-const express = require('express'), cors = require('cors'), mongoose = require('mongoose');
+const { randomUUID } = require('crypto');
+const express = require('express'), cors = require('cors');
 const bcrypt = require('bcryptjs'), jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
-const { User, Friendship } = require('./models');
+const db = require('./models');
 const { Room, ClashArena, MAX_PLAYERS, MAX_TEAMS } = require('./game');
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/linkedup';
 
 const app = express();
 app.use(cors());
@@ -18,14 +18,14 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 /* ---------- Auth ---------- */
-const sign = u => jwt.sign({ id: u._id.toString() }, JWT_SECRET, { expiresIn: '30d' });
+const sign = u => jwt.sign({ id: u.id }, JWT_SECRET, { expiresIn: '30d' });
 const wrap = fn => (req, res) => fn(req, res).catch(e => res.status(e.status || 500).json({ error: e.status ? e.message : 'Server error' }));
 const fail = (status, message) => Object.assign(new Error(message), { status });
 
 async function auth(req, res, next) {
   try {
     const { id } = jwt.verify((req.headers.authorization || '').replace('Bearer ', ''), JWT_SECRET);
-    req.user = await User.findById(id);
+    req.user = await db.findUserById(id);
     if (!req.user) throw 0;
     next();
   } catch { res.status(401).json({ error: 'Please sign in again.' }); }
@@ -38,15 +38,20 @@ app.post('/api/register', wrap(async (req, res) => {
   if (!/^[a-z0-9_]{3,20}$/.test(username)) throw fail(400, 'Username must be 3-20 letters, numbers or underscores.');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw fail(400, 'Enter a valid email address.');
   if (password.length < 6) throw fail(400, 'Password must be at least 6 characters.');
-  if (await User.findOne({ $or: [{ username }, { email }] })) throw fail(409, 'That username or email is already taken.');
-  const user = await User.create({ username, email, passHash: await bcrypt.hash(password, 10) });
+  let user;
+  try {
+    user = await db.createUser({ id: randomUUID(), username, email, passHash: await bcrypt.hash(password, 10) });
+  } catch (error) {
+    if (error.code === '23505') throw fail(409, 'That username or email is already taken.');
+    throw error;
+  }
   res.json({ token: sign(user), user: { id: user.id, username } });
 }));
 
 // Players can sign in with EITHER their username OR their email.
 app.post('/api/login', wrap(async (req, res) => {
   const ident = String(req.body.identifier || '').trim().toLowerCase();
-  const user = await User.findOne({ $or: [{ username: ident }, { email: ident }] });
+  const user = await db.findUserByLogin(ident);
   if (!user || !(await bcrypt.compare(String(req.body.password || ''), user.passHash))) throw fail(401, 'Wrong username/email or password.');
   res.json({ token: sign(user), user: { id: user.id, username: user.username } });
 }));
@@ -54,35 +59,29 @@ app.post('/api/login', wrap(async (req, res) => {
 app.get('/api/me', auth, (req, res) => res.json({ id: req.user.id, username: req.user.username }));
 
 app.get('/api/highscores', auth, wrap(async (req, res) => {
-  const user = await User.findById(req.user.id).select('clashHighScore highScoreVisibility');
+  const { user, leaders } = await db.getHighScores(req.user.id);
   if (!user) throw fail(404, 'Player not found.');
-  const leaders = await User.find({ highScoreVisibility: 'public', clashHighScore: { $gt: 0 } })
-    .sort({ clashHighScore: -1, username: 1 })
-    .limit(10)
-    .select('username clashHighScore')
-    .lean();
   res.json({
     visibility: user.highScoreVisibility || 'private',
     personalBest: user.highScoreVisibility === 'hidden' ? null : user.clashHighScore || 0,
     leaders: leaders.map((player, index) => ({
-      rank: index + 1, username: player.username, score: player.clashHighScore
+      rank: index + 1, username: player.username, score: player.score
     }))
   });
 }));
 
 app.patch('/api/me/high-score-visibility', auth, wrap(async (req, res) => {
   const { visibility } = req.body || {};
-  if (!['public', 'private', 'hidden'].includes(visibility)) {
+  if (!db.isHighScoreVisibility(visibility)) {
     throw fail(400, 'Choose public, private, or hidden visibility.');
   }
-  await User.updateOne({ _id: req.user.id }, { $set: { highScoreVisibility: visibility } });
+  await db.setHighScoreVisibility(req.user.id, visibility);
   res.json({ visibility });
 }));
 
 app.delete('/api/me', auth, wrap(async (req, res) => {
   const id = req.user.id;
-  await Friendship.deleteMany({ $or: [{ requester: id }, { recipient: id }] });
-  await User.deleteOne({ _id: id });
+  await db.deleteUser(id);
   leaveRoom(id);
   io.in('u:' + id).disconnectSockets(true);
   res.json({ ok: true });
@@ -95,24 +94,22 @@ const rooms = new Map();     // code -> Room
 // offline = no connection, online = free to invite, in_game = inside a game room
 const statusOf = id => !(sockets.get(id) && sockets.get(id).size) ? 'offline' : userRoom.has(id) ? 'in_game' : 'online';
 
-async function friendIds(uid) {
-  const rows = await Friendship.find({ status: 'accepted', $or: [{ requester: uid }, { recipient: uid }] });
-  return rows.map(r => (r.requester.toString() === uid ? r.recipient : r.requester).toString());
-}
 async function announce(uid) {
   const s = statusOf(uid);
-  (await friendIds(uid)).forEach(f => io.to('u:' + f).emit('presence', { userId: uid, status: s }));
+  (await db.getFriendIds(uid)).forEach(f => io.to('u:' + f).emit('presence', { userId: uid, status: s }));
 }
 
 /* ---------- Friends ---------- */
 app.get('/api/friends', auth, wrap(async (req, res) => {
   const me = req.user.id;
-  const rows = await Friendship.find({ $or: [{ requester: me }, { recipient: me }] }).populate('requester recipient', 'username');
+  const rows = await db.getFriendshipsForUser(me);
   const out = { friends: [], incoming: [], outgoing: [] };
   for (const r of rows) {
-    const mine = r.requester.id === me, other = mine ? r.recipient : r.requester;
-    if (r.status === 'accepted') out.friends.push({ id: other.id, username: other.username, status: statusOf(other.id) });
-    else (mine ? out.outgoing : out.incoming).push({ id: r.id, username: other.username });
+    const mine = r.requester === me;
+    const otherId = mine ? r.recipient : r.requester;
+    const otherUsername = mine ? r.recipient_username : r.requester_username;
+    if (r.status === 'accepted') out.friends.push({ id: otherId, username: otherUsername, status: statusOf(otherId) });
+    else (mine ? out.outgoing : out.incoming).push({ id: r.id, username: otherUsername });
   }
   out.friends.sort((a, b) => a.username.localeCompare(b.username));
   res.json(out);
@@ -120,31 +117,37 @@ app.get('/api/friends', auth, wrap(async (req, res) => {
 const ping = id => io.to('u:' + id).emit('friends:update');
 
 app.post('/api/friends/request', auth, wrap(async (req, res) => {
-  const target = await User.findOne({ username: String(req.body.username || '').trim().toLowerCase() });
+  const target = await db.findUserByUsername(String(req.body.username || '').trim().toLowerCase());
   if (!target) throw fail(404, 'No player with that username.');
   if (target.id === req.user.id) throw fail(400, "You can't add yourself.");
-  const existing = await Friendship.findOne({ $or: [{ requester: req.user.id, recipient: target.id }, { requester: target.id, recipient: req.user.id }] });
+  const existing = await db.findFriendshipBetween(req.user.id, target.id);
   if (existing) {
     if (existing.status === 'accepted') throw fail(409, 'You are already friends.');
-    if (existing.recipient.toString() === req.user.id) { existing.status = 'accepted'; await existing.save(); ping(target.id); return res.json({ ok: true, accepted: true }); }
+    if (existing.recipient === req.user.id) { await db.updateFriendshipStatus(existing.id, 'accepted'); ping(target.id); return res.json({ ok: true, accepted: true }); }
     throw fail(409, 'Request already sent.');
   }
-  await Friendship.create({ requester: req.user.id, recipient: target.id });
+  try {
+    await db.createFriendship({ id: randomUUID(), requester: req.user.id, recipient: target.id });
+  } catch (error) {
+    if (error.code === '23505') throw fail(409, 'Request already sent.');
+    throw error;
+  }
   ping(target.id);
   res.json({ ok: true });
 }));
 
 app.post('/api/friends/respond', auth, wrap(async (req, res) => {
-  const f = await Friendship.findById(req.body.id);
-  if (!f || f.recipient.toString() !== req.user.id || f.status !== 'pending') throw fail(404, 'Request not found.');
-  if (req.body.accept) { f.status = 'accepted'; await f.save(); } else await f.deleteOne();
-  ping(f.requester.toString());
+  const f = await db.findFriendshipById(req.body.id);
+  if (!f || f.recipient !== req.user.id || f.status !== 'pending') throw fail(404, 'Request not found.');
+  if (req.body.accept) await db.updateFriendshipStatus(f.id, 'accepted');
+  else await db.deleteFriendshipById(f.id);
+  ping(f.requester);
   res.json({ ok: true });
 }));
 
 app.delete('/api/friends/:userId', auth, wrap(async (req, res) => {
   const o = req.params.userId;
-  await Friendship.deleteOne({ $or: [{ requester: req.user.id, recipient: o }, { requester: o, recipient: req.user.id }] });
+  await db.deleteFriendshipBetween(req.user.id, o);
   ping(o);
   res.json({ ok: true });
 }));
@@ -217,7 +220,7 @@ function createClashArena(uid, options = {}) {
   const code = genCode();
   const arena = new ClashArena(code, io, uid, {
     durationMs, crashRule: options.crashRule,
-    onEnd: results => saveClashHighScores(results).catch(error => {
+    onEnd: results => db.saveClashHighScores(results).catch(error => {
       console.error('Could not save clash high scores:', error.message);
     })
   });
@@ -235,20 +238,10 @@ function joinClashArena(uid, code) {
   if (source.players.length > MAX_PLAYERS) return 'A team can have at most 4 players.';
   return transferTeamToArena(source, arena);
 }
-async function saveClashHighScores(results) {
-  for (const team of results) {
-    if (!team.participantIds.length) continue;
-    await User.updateMany(
-      { _id: { $in: team.participantIds } },
-      { $max: { clashHighScore: team.score } }
-    );
-  }
-}
-
 io.use(async (socket, next) => {
   try {
     const { id } = jwt.verify(socket.handshake.auth.token, JWT_SECRET);
-    const u = await User.findById(id);
+    const u = await db.findUserById(id);
     if (!u) throw 0;
     socket.user = { id: u.id, username: u.username };
     next();
@@ -293,7 +286,7 @@ io.on('connection', socket => {
   // Invite a friend: to a regular room or to the inviter's team in a clash lobby.
   socket.on('invite:send', async ({ friendId } = {}) => {
     try {
-      if (!(await friendIds(me.id)).includes(String(friendId))) return err('You can only invite friends.');
+      if (!(await db.getFriendIds(me.id)).includes(String(friendId))) return err('You can only invite friends.');
       const s = statusOf(String(friendId));
       if (s === 'offline') return err('That player is offline.');
       if (s === 'in_game') return err('That player is in another game right now.');
@@ -319,6 +312,11 @@ io.on('connection', socket => {
   });
 });
 
-mongoose.connect(MONGODB_URI).then(() => {
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is required. Set it to your Neon PostgreSQL connection string.');
+  process.exit(1);
+}
+
+db.initializeDatabase().then(() => {
   server.listen(PORT, () => console.log('Linked Up running on port ' + PORT));
-}).catch(e => { console.error('MongoDB connection failed:', e.message); process.exit(1); });
+}).catch(e => { console.error('PostgreSQL connection failed:', e.message); process.exit(1); });

@@ -7,6 +7,7 @@
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test",
+    "build:netlify": "node scripts/netlify-build.js",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios"
@@ -17,8 +18,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
-    "mongodb": "^7.7.0",
-    "mongoose": "^8.5.0",
+    "pg": "^8.16.3",
     "socket.io": "^4.7.5"
   },
   "devDependencies": {
