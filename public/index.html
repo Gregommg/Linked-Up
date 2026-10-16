@@ -3,6 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#10151c">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/linked-up.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/linked-up.svg">
 <title>Linked Up (Coil-ition)</title>
 <style>
 :root{--bg:#10151c;--card:#1a222d;--line:#2a3544;--tx:#e8eef6;--mut:#8b9bb0;--acc:#5be37d;--warn:#ffb454;--bad:#ff6b6b}
@@ -84,7 +88,8 @@ canvas{width:100%;max-width:600px;background:#0d1219;border:2px solid var(--line
     </form>
     <div class="err" id="authErr"></div>
   </div>
-  <p class="center small"><a href="downloads/linked-up.apk" style="color:var(--acc)">Download the Android app (.apk)</a></p>
+  <p class="center"><button id="installAppBtn" class="sec" type="button">Install mobile app</button></p>
+  <p class="center small" id="installHelp" aria-live="polite">Install Linked Up on your phone for quick access from your home screen.</p>
 </div>
 
 <!-- Main app -->
@@ -188,5 +193,6 @@ canvas{width:100%;max-width:600px;background:#0d1219;border:2px solid var(--line
 <script src="config.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
 <script src="app.js"></script>
+<script src="install.js"></script>
 </body>
 </html>

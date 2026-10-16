@@ -58,8 +58,11 @@ npm run build:netlify
 
 Do not use `npm start` as Netlify's build command; Netlify serves the generated static frontend, while Railway runs the multiplayer backend.
 
-## Android and iOS (Capacitor wraps the same web app)
-1. Deploy the server first, then set `window.API_BASE` in `public/config.js` to your server URL (e.g. `https://linked-up-production.up.railway.app`)
+## Install on a phone
+The deployed site is installable as a Progressive Web App (PWA). Open it over HTTPS on your phone and tap **Install mobile app** on the sign-in screen. On Android, accept the browser's install prompt. On iPhone or iPad, open the site in Safari, tap **Share**, then **Add to Home Screen**. Multiplayer still requires an internet connection.
+
+## Android and iOS native builds (Capacitor)
+1. Set `window.API_BASE` in `public/config.js` to your deployed HTTPS backend URL (for example, `https://linked-up-production.up.railway.app`).
 2. `npm install`
 3. `npx cap add android` and/or `npx cap add ios`
 4. `npx cap sync`
@@ -72,7 +75,7 @@ Android Studio -> Build -> Generate Signed Bundle (.aab) -> upload in Play Conso
 Needs a Mac + Apple Developer account ($99/year). In Xcode: Product -> Archive -> Distribute. Apple expects more than a plain website, so add native features such as push notifications (below). Account deletion is already built in (required by Apple).
 
 ### Direct download
-Build a signed APK in Android Studio (Build -> Build APK) and put it at `public/downloads/linked-up.apk`. The sign-in page already links to it.
+The sign-in screen installs the PWA; it does not link to an APK. To distribute a native Android APK, generate and sign it in Android Studio first, then publish the APK separately. Do not put an unsigned debug APK on the public site.
 
 ## Not included yet (next steps)
 - **Push notifications** for invites when the app is closed: add `@capacitor/push-notifications` + Firebase, and send a push from the `invite:send` handler in `server/index.js`
