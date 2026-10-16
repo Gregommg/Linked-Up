@@ -228,7 +228,7 @@ document.querySelectorAll('#pad button').forEach(b => b.addEventListener('pointe
 /* ---------- Drawing ---------- */
 function draw() {
   const c = $('board'), g = c.getContext('2d'), W = 30, H = 20, s = c.width / W;
-  g.fillStyle = '#0d1219'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#050805'; g.fillRect(0, 0, c.width, c.height);
   const roundRect = (x, y, width, height, radius) => {
     g.beginPath();
     g.roundRect(x, y, width, height, radius);
@@ -271,7 +271,7 @@ function draw() {
     g.save();
     g.shadowColor = color; g.shadowBlur = 5;
     snake.slice(1).forEach((p, i) => {
-      const shade = i % 2 ? color : (color === '#5be37d' ? '#43c968' : color);
+      const shade = i % 2 ? color : (color === '#19e34b' ? '#13bf3c' : color);
       const x = p.x * s + 1.5, y = p.y * s + 1.5, size = s - 3;
       g.fillStyle = shade;
       roundRect(x, y, size, size, size * .38);
@@ -290,7 +290,7 @@ function draw() {
       const ex = hx + dx * eyeFront - dy * eyeSide * side;
       const ey = hy + dy * eyeFront + dx * eyeSide * side;
       g.fillStyle = '#fff'; g.beginPath(); g.arc(ex, ey, eyeRadius, 0, Math.PI * 2); g.fill();
-      g.fillStyle = '#102018'; g.beginPath(); g.arc(ex + dx * eyeRadius * .35, ey + dy * eyeRadius * .35, eyeRadius * .55, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#050805'; g.beginPath(); g.arc(ex + dx * eyeRadius * .35, ey + dy * eyeRadius * .35, eyeRadius * .55, 0, Math.PI * 2); g.fill();
     }
     g.restore();
   };
@@ -298,14 +298,14 @@ function draw() {
     if (frame.food) drawApple(frame.food);
     if (frame.bonusFood) drawBonus(frame.bonusFood);
     if (room && room.mode === 'clash') {
-      const colors = ['#5be37d', '#66b8ff', '#ffb454', '#c596ff'];
+      const colors = ['#19e34b', '#66b8ff', '#ffb454', '#c596ff'];
       frame.teams.forEach((team, teamIndex) => drawSnake(team.snake, colors[teamIndex % colors.length]));
     } else if (frame.snake) {
-      drawSnake(frame.snake, '#5be37d');
+      drawSnake(frame.snake, '#19e34b');
     }
   }
   const msg = !room ? '' : room.phase === 'countdown' ? 'Get ready…' : (room.phase === 'lobby' && !frame) ? 'Waiting to start' : '';
-  if (msg) { g.fillStyle = '#e8eef6'; g.font = 'bold 28px system-ui'; g.textAlign = 'center'; g.fillText(msg, c.width / 2, c.height / 2); }
+  if (msg) { g.fillStyle = '#f0f5ee'; g.font = 'bold 28px system-ui'; g.textAlign = 'center'; g.fillText(msg, c.width / 2, c.height / 2); }
 }
 
 /* ---------- Auto sign-in ---------- */
