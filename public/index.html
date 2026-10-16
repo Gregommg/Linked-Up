@@ -5,10 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#10151c">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="any">
-<link rel="icon" href="/favicon.png" type="image/png" sizes="32x32">
-<link rel="icon" href="/icons/linked-up.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<link rel="icon" href="/favicon.ico?v=7" type="image/x-icon" sizes="any">
+<link rel="icon" href="/favicon.png?v=7" type="image/png" sizes="32x32">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=7">
 <title>Linked Up (Coil-ition)</title>
 <style>
 :root{--bg:#10151c;--card:#1a222d;--line:#2a3544;--tx:#e8eef6;--mut:#8b9bb0;--acc:#5be37d;--warn:#ffb454;--bad:#ff6b6b}
@@ -30,6 +29,8 @@ button.sec{background:#2a3544;color:var(--tx)}button.bad{background:var(--bad);c
 .err{color:var(--bad);min-height:20px;font-size:13px}
 .layout{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.brand-title{display:flex;align-items:center;justify-content:center;gap:8px}
+.brand-icon{width:34px;height:34px;object-fit:contain;flex:none}
 .score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
 .score-list{list-style:none;padding:0;margin:8px 0 0}
 .score-list li{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
@@ -61,7 +62,7 @@ canvas{width:100%;max-width:600px;background:#0d1219;border:2px solid var(--line
 
 <!-- Sign in / register -->
 <div class="wrap" id="authView" style="max-width:420px;margin-top:40px">
-  <h1 class="center">🐍 Linked Up</h1>
+  <h1 class="brand-title"><img class="brand-icon" src="/icons/icon-192.png?v=7" alt="">Linked Up</h1>
   <p class="center small">Team up to control one snake, or compete against other teams in Snake Clash.</p>
   <div class="card">
     <div class="tabs"><button id="tabLogin" class="on">Sign in</button><button id="tabReg">Create account</button></div>
@@ -97,7 +98,7 @@ canvas{width:100%;max-width:600px;background:#0d1219;border:2px solid var(--line
 <!-- Main app -->
 <div class="wrap hidden" id="appView">
   <div class="top">
-    <h1>🐍 Linked Up</h1>
+    <h1 class="brand-title"><img class="brand-icon" src="/icons/icon-192.png?v=7" alt="">Linked Up</h1>
     <div class="row"><span id="meName" class="lbl"></span><button class="sec" id="logoutBtn">Log out</button></div>
   </div>
   <div class="layout">
