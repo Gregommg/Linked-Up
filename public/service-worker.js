@@ -1,12 +1,18 @@
-const CACHE_NAME = 'linked-up-shell-v1';
+const CACHE_NAME = 'linked-up-shell-v5';
 const APP_SHELL = [
   '/',
   '/index.html',
   '/app.js',
   '/config.js',
   '/install.js',
+  '/favicon.ico',
+  '/favicon.png',
   '/manifest.webmanifest',
-  '/icons/linked-up.svg'
+  '/icons/linked-up.svg',
+  '/icons/snake-reference.jpeg',
+  '/icons/apple-touch-icon.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png'
 ];
 
 self.addEventListener('install', event => {
